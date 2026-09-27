@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>天体 南中時刻 計算ツール</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0f172a; color: #f1f5f9; font-family: 'Segoe UI', sans-serif; }
+</style>
+</head>
+<body class="min-h-screen p-4">
+<div class="max-w-5xl mx-auto">
+  <h1 class="text-2xl font-bold text-blue-300 mb-1">🌠 天体 南中時刻 計算ツール</h1>
+  <p class="text-gray-400 mb-6 text-sm">太陽・月の南中時刻・高度・日の出/日没・薄明時刻を計算します（Jean Meeus式近似）</p>
+
+  <!-- 入力 -->
+  <div class="bg-gray-800 rounded-xl p-5 mb-6">
+    <h2 class="text-lg font-semibold text-blue-200 mb-4">観測地・日付</h2>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div>
+        <label for="lat" class="block text-sm text-gray-300 mb-1">緯度 (°)</label>
+        <input type="number" id="lat" value="35.6895" step="0.001" min="-90" max="90"
+          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+          aria-label="緯度">
+      </div>
+      <div>
+        <label for="lon" class="block text-sm text-gray-300 mb-1">経度 (°)</label>
+        <input type="number" id="lon" value="139.6917" step="0.001" min="-180" max="180"
+          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+          aria-label="経度">
+      </div>
+      <div>
+        <label for="tz" class="block text-sm text-gray-300 mb-1">タイムゾーン (h)</label>
+        <input type="number" id="tz" value="9" step="0.5" min="-12" max="14"
+          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+          aria-label="タイムゾーン">
+      </div>
+      <div>
+        <label for="date" class="block text-sm text-gray-300 mb-1">日付</label>
+        <input type="date" id="date"
+          class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+          aria-label="日付">
+      </div>
+    </div>
+    <div class="mt-4 flex flex-wrap gap-2">
+      <button onclick="setLocation(35.6895,139.6917,'東京')" class="bg-gray-600 hover:bg-gray-500 text-white text-sm py-1 px-3 rounded-lg" aria-label="東京に設定">東京</button>
+      <button onclick="setLocation(34.6937,135.5023,'大阪')" class="bg-gray-600 hover:bg-gray-500 text-white text-sm py-1 px-3 rounded-lg" aria-label="大阪に設定">大阪</button>
+      <button onclick="setLocation(43.0642,141.3469,'札幌')" class="bg-gray-600 hover:bg-gray-500 text-white text-sm py-1 px-3 rounded-lg" aria-label="札幌に設定">札幌</button>
+      <button onclick="setLocation(26.2124,127.6809,'那覇')" class="bg-gray-600 hover:bg-gray-500 text-white text-sm py-1 px-3 rounded-lg" aria-label="那覇に設定">那覇</button>
+      <button onclick="calcAll()"
+        class="ml-auto bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition-colors"
+        aria-label="計算する">計算する</button>
+    </div>
+  </div>
+
+  <!-- 結果 -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <!-- 太陽 -->
+    <div class="bg-gray-800 rounded-xl p-5">
+      <h2 class="text-lg font-semibold text-yellow-300 mb-4">☀️ 太陽</h2>
+      <div id="sun-results" class="space-y-2 text-sm">
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">日の出</span><span id="sun-rise" class="font-mono text-white">--:--</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">南中時刻</span><span id="sun-transit" class="font-mono text-yellow-400 font-bold">--:--</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">南中高度</span><span id="sun-alt" class="font-mono text-white">--°</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">日の入り</span><span id="sun-set" class="font-mono text-white">--:--</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">市民薄明（開始）</span><span id="civil-dawn" class="font-mono text-gray-300">--:--</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">航海薄明（開始）</span><span id="nautical-dawn" class="font-mono text-gray-300">--:--</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">天文薄明（開始）</span><span id="astro-dawn" class="font-mono text-gray-300">--:--</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-gray-400">日照時間</span><span id="daylight" class="font-mono text-green-400">--h --m</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 月 -->
+    <div class="bg-gray-800 rounded-xl p-5">
+      <h2 class="text-lg font-semibold text-gray-300 mb-4">🌙 月</h2>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">月齢</span><span id="moon-age" class="font-mono text-white">--</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">月相</span><span id="moon-phase" class="font-mono text-white">--</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">月の出（概算）</span><span id="moon-rise" class="font-mono text-gray-300">--:--</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">南中時刻（概算）</span><span id="moon-transit" class="font-mono text-blue-300 font-bold">--:--</span>
+        </div>
+        <div class="flex justify-between py-2 border-b border-gray-700">
+          <span class="text-gray-400">月の入り（概算）</span><span id="moon-set" class="font-mono text-gray-300">--:--</span>
+        </div>
+        <div class="flex justify-between py-2">
+          <span class="text-gray-400">照度</span>
+          <span id="moon-illum" class="font-mono text-white">--%</span>
+        </div>
+        <div class="mt-3">
+          <div id="moon-icon" class="text-6xl text-center">🌑</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Canvas グラフ -->
+  <div class="bg-gray-800 rounded-xl p-5">
+    <h2 class="text-lg font-semibold text-blue-200 mb-4">天体高度 1日推移グラフ</h2>
+    <canvas id="altitude-graph" width="800" height="300" class="w-full rounded-lg bg-gray-900"></canvas>
+    <div class="flex gap-4 mt-2 text-sm">
+      <span class="flex items-center gap-1"><span class="inline-block w-4 h-2 bg-yellow-400 rounded"></span> 太陽</span>
+      <span class="flex items-center gap-1"><span class="inline-block w-4 h-2 bg-blue-300 rounded"></span> 月</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== Math helpers =====
+const DEG = Math.PI / 180;
+const RAD = 180 / Math.PI;
+function sin(d) { return Math.sin(d * DEG); }
+function cos(d) { return Math.cos(d * DEG); }
+function asin(x) { return Math.asin(x) * RAD; }
+function acos(x) { return Math.acos(x) * RAD; }
+function atan2(y, x) { return Math.atan2(y, x) * RAD; }
+
+function julianDay(date) {
+  const y = date.getUTCFullYear();
+  const m = date.getUTCMonth() + 1;
+  const d = date.getUTCDate();
+  const A = Math.floor(y / 100);
+  const B = 2 - A + Math.floor(A / 4);
+  return Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + B - 1524.5;
+}
+
+function sunPosition(jd) {
+  const n = jd - 2451545.0;
+  const L = (280.460 + 0.9856474 * n) % 360;
+  const g = (357.528 + 0.9856003 * n) % 360;
+  const lambda = L + 1.915 * sin(g) + 0.020 * sin(2 * g);
+  const epsilon = 23.439 - 0.0000004 * n;
+  const sinLat = sin(epsilon) * sin(lambda);
+  const declination = asin(sinLat);
+  const ra = atan2(cos(epsilon) * sin(lambda), cos(lambda));
+  return { declination, ra: ra < 0 ? ra + 360 : ra };
+}
+
+function hourAngleFromAltitude(lat, dec, targetAlt) {
+  const cosH = (sin(targetAlt) - sin(lat) * sin(dec)) / (cos(lat) * cos(dec));
+  if (cosH < -1 || cosH > 1) return null;
+  return acos(cosH);
+}
+
+function eqnOfTime(jd) {
+  const n = jd - 2451545.0;
+  const g = (357.528 + 0.9856003 * n) % 360;
+  const L = (280.460 + 0.9856474 * n) % 360;
+  const lambda = L + 1.915 * sin(g) + 0.020 * sin(2 * g);
+  const epsilon = 23.439 - 0.0000004 * n;
+  const y = Math.tan((epsilon / 2) * DEG) ** 2;
+  const eot = y * sin(2 * L * DEG) - 2 * 0.016709 * sin(g * DEG)
+    + 4 * 0.016709 * y * sin(g * DEG) * cos(2 * L * DEG)
+    - 0.5 * y * y * sin(4 * L * DEG) - 1.25 * 0.016709 * 0.016709 * sin(2 * g * DEG);
+  return eot * (1440 / (2 * Math.PI)); // minutes
+}
+
+function hhmm(fracHours) {
+  if (fracHours == null || isNaN(fracHours)) return '---';
+  let h = fracHours % 24;
+  if (h < 0) h += 24;
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return String(hh).padStart(2, '0') + ':' + String(mm < 60 ? mm : mm - 60).padStart(2, '0');
+}
+
+function setLocation(lat, lon, name) {
+  document.getElementById('lat').value = lat;
+  document.getElementById('lon').value = lon;
+}
+
+function calcAll() {
+  const lat = parseFloat(document.getElementById('lat').value);
+  const lon = parseFloat(document.getElementById('lon').value);
+  const tz = parseFloat(document.getElementById('tz').value);
+  const dateStr = document.getElementById('date').value;
+  const date = new Date(dateStr + 'T12:00:00Z');
+  const jd = julianDay(date);
+
+  // Sun calculations
+  const sun = sunPosition(jd);
+  const eot = eqnOfTime(jd);
+  // Solar noon in UTC hours
+  const solarNoonUTC = 12 - lon / 15 - eot / 60;
+  const solarNoonLocal = solarNoonUTC + tz;
+
+  // Sunrise/sunset (h = -0.833 for refraction+disc)
+  const H = hourAngleFromAltitude(lat, sun.declination, -0.833);
+  const sunrise = H != null ? solarNoonLocal - H / 15 : null;
+  const sunset = H != null ? solarNoonLocal + H / 15 : null;
+  const sunTransitAlt = 90 - Math.abs(lat - sun.declination);
+
+  document.getElementById('sun-rise').textContent = hhmm(sunrise);
+  document.getElementById('sun-transit').textContent = hhmm(solarNoonLocal);
+  document.getElementById('sun-alt').textContent = sunTransitAlt.toFixed(1) + '°';
+  document.getElementById('sun-set').textContent = hhmm(sunset);
+
+  // Twilight
+  const Hciv = hourAngleFromAltitude(lat, sun.declination, -6);
+  const Hnaut = hourAngleFromAltitude(lat, sun.declination, -12);
+  const Hastro = hourAngleFromAltitude(lat, sun.declination, -18);
+  document.getElementById('civil-dawn').textContent = Hciv ? hhmm(solarNoonLocal - Hciv / 15) : '---';
+  document.getElementById('nautical-dawn').textContent = Hnaut ? hhmm(solarNoonLocal - Hnaut / 15) : '---';
+  document.getElementById('astro-dawn').textContent = Hastro ? hhmm(solarNoonLocal - Hastro / 15) : '---';
+
+  if (sunrise != null && sunset != null) {
+    const dl = sunset - sunrise;
+    document.getElementById('daylight').textContent = Math.floor(dl) + 'h ' + Math.round((dl % 1) * 60) + 'm';
+  }
+
+  // Moon
+  const moonAge = moonAgeCalc(jd);
+  const moonIllum = (1 - Math.cos(moonAge / 29.53059 * 2 * Math.PI)) / 2 * 100;
+  const moonPhaseStr = getMoonPhaseStr(moonAge);
+  const moonIcon = getMoonIcon(moonAge);
+
+  document.getElementById('moon-age').textContent = moonAge.toFixed(1) + ' 日';
+  document.getElementById('moon-phase').textContent = moonPhaseStr;
+  document.getElementById('moon-illum').textContent = moonIllum.toFixed(0) + '%';
+  document.getElementById('moon-icon').textContent = moonIcon;
+
+  // Moon rise/transit/set approximate (based on age offset from solar noon)
+  const moonOffsetH = moonAge / 29.53059 * 24; // hours behind sun
+  const moonTransit = (solarNoonLocal + moonOffsetH) % 24;
+  document.getElementById('moon-transit').textContent = hhmm(moonTransit);
+  document.getElementById('moon-rise').textContent = hhmm(moonTransit - 6);
+  document.getElementById('moon-set').textContent = hhmm(moonTransit + 6);
+
+  drawAltitudeGraph(lat, lon, tz, jd, solarNoonUTC, sun, moonAge);
+}
+
+function moonAgeCalc(jd) {
+  const newMoonJD = 2451549.5;
+  const synodicMonth = 29.53059;
+  return ((jd - newMoonJD) % synodicMonth + synodicMonth) % synodicMonth;
+}
+
+function getMoonPhaseStr(age) {
+  if (age < 1.85) return '🌑 新月';
+  if (age < 7.38) return '🌒 三日月';
+  if (age < 9.22) return '🌓 上弦';
+  if (age < 14.77) return '🌔 十三夜月';
+  if (age < 16.61) return '🌕 満月';
+  if (age < 22.15) return '🌖 十六夜月';
+  if (age < 24.0) return '🌗 下弦';
+  if (age < 27.69) return '🌘 有明月';
+  return '🌑 晦日月';
+}
+
+function getMoonIcon(age) {
+  const icons = ['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'];
+  return icons[Math.floor(age / 29.53059 * 8) % 8];
+}
+
+function sunAltAtHour(lat, lon, tz, jd, utcHour) {
+  const jdH = jd + (utcHour - 12) / 24;
+  const sun = sunPosition(jdH);
+  const eot = eqnOfTime(jdH);
+  const solarNoonUTC = 12 - lon / 15 - eot / 60;
+  const h = (utcHour - solarNoonUTC) * 15;
+  return asin(sin(lat) * sin(sun.declination) + cos(lat) * cos(sun.declination) * cos(h));
+}
+
+function drawAltitudeGraph(lat, lon, tz, jd, solarNoonUTC, sun, moonAge) {
+  const canvas = document.getElementById('altitude-graph');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const pad = { top: 20, right: 20, bottom: 40, left: 50 };
+  const gW = W - pad.left - pad.right;
+  const gH = H - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Gradient sky background
+  const moonTransitH = ((solarNoonUTC + moonAge / 29.53059 * 24) % 24);
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + gH);
+  grad.addColorStop(0, '#1e3a5f');
+  grad.addColorStop(1, '#0f172a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(pad.left, pad.top, gW, gH);
+
+  // Grid
+  ctx.strokeStyle = '#374151';
+  ctx.lineWidth = 1;
+  for (let deg = -90; deg <= 90; deg += 30) {
+    const y = pad.top + gH * (1 - (deg + 90) / 180);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + gW, y); ctx.stroke();
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(deg + '°', pad.left - 5, y + 4);
+  }
+  // Horizon line
+  const horizY = pad.top + gH * (1 - (0 + 90) / 180);
+  ctx.strokeStyle = '#4b5563';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath(); ctx.moveTo(pad.left, horizY); ctx.lineTo(pad.left + gW, horizY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  for (let i = 0; i <= 24; i += 4) {
+    const x = pad.left + (i / 24) * gW;
+    ctx.beginPath(); ctx.strokeStyle = '#374151'; ctx.lineWidth = 1;
+    ctx.moveTo(x, pad.top); ctx.lineTo(x, pad.top + gH); ctx.stroke();
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    const localH = (i + tz) % 24;
+    ctx.fillText(String(Math.round(localH)).padStart(2,'0') + ':00', x, pad.top + gH + 18);
+  }
+  ctx.fillStyle = '#d1d5db';
+  ctx.font = '12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('時刻 (現地時間)', pad.left + gW / 2, H - 5);
+
+  // Sun altitude line
+  ctx.beginPath();
+  ctx.strokeStyle = '#fbbf24';
+  ctx.lineWidth = 2.5;
+  for (let i = 0; i <= 240; i++) {
+    const utcHour = i / 10;
+    const alt = sunAltAtHour(lat, lon, tz, jd, utcHour);
+    const x = pad.left + (utcHour / 24) * gW;
+    const y = pad.top + gH * (1 - (alt + 90) / 180);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Moon altitude (rough: ~6h half-period, offset by moonAge)
+  ctx.beginPath();
+  ctx.strokeStyle = '#93c5fd';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 3]);
+  for (let i = 0; i <= 240; i++) {
+    const utcHour = i / 10;
+    const localHour = (utcHour + tz) % 24;
+    const moonTransitLocal = (solarNoonUTC + tz + moonAge / 29.53059 * 24) % 24;
+    const hAngle = (localHour - moonTransitLocal) * 15;
+    const moonDec = sun.declination - moonAge / 29.53059 * 20;
+    const alt = asin(sin(lat) * sin(moonDec) + cos(lat) * cos(moonDec) * cos(hAngle));
+    const x = pad.left + (utcHour / 24) * gW;
+    const y = pad.top + gH * (1 - (alt + 90) / 180);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// Init
+const today = new Date();
+const yyyy = today.getFullYear();
+const mm = String(today.getMonth() + 1).padStart(2, '0');
+const dd = String(today.getDate()).padStart(2, '0');
+document.getElementById('date').value = `${yyyy}-${mm}-${dd}`;
+calcAll();
+</script>
+</body>
+</html>
